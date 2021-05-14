@@ -255,7 +255,7 @@ def main():
     pygame.mixer.init()
     pygame.mixer.music.set_volume(0.5)
     pygame.mixer.Channel(1).set_volume(0.1)
-    if randint(0, 1) == 0:
+    if randint(0, 1):
         pygame.mixer.Channel(1).play(pygame.mixer.Sound(f"{SOUND_PATH}\\{SOUND_BACKGROUND1_NAME}.{SOUND_FILE_EXT}"))
     else:
         pygame.mixer.Channel(1).play(pygame.mixer.Sound(f"{SOUND_PATH}\\{SOUND_BACKGROUND2_NAME}.{SOUND_FILE_EXT}"))
