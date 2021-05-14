@@ -143,7 +143,9 @@ class Sword:
         mov = [0, 0]  # By means of top-left, aka [1, 1] is South-East
 
         if self.undashable is not None and datetime.datetime.utcnow() > self.undashable:
-            self.undashable = None
+            self.undashable = None # means dash is ready
+            pygame.mixer.music.load(f"{SOUND_PATH}\\{SOUND_TING_NAME}.{SOUND_FILE_EXT}")
+            pygame.mixer.music.play()
         if not self.dashing:
             if keys[pygame.K_a] or keys[pygame.K_LEFT]:
                 mov[0] -= 1
@@ -246,6 +248,8 @@ def game_loop():
 
 def main():
     pygame.init()
+    pygame.mixer.init(frequency=44100, size=-16, channels=2, buffer=512)
+    pygame.mixer.music.set_volume(0.5)
     game_loop()
     pygame.quit()
 
