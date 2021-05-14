@@ -9,8 +9,11 @@ class Sword:
     def __init__(self, x, y):
         self.x = x
         self.y = y
+        self.x_texture = x
+        self.y_texture = y
         self.direction = DIRECTION_NORTH
         self.texture = TEXTURE_NORTH
+        self.mask = pygame.mask.from_surface(self.texture)
         self.dashing = False
         self.dashing_dir = (0, 0)
         self.stop_dash_time = None
@@ -20,22 +23,22 @@ class Sword:
     def change_dir(self, new_dir):
         self.direction = new_dir
         self.texture = DIRECTION_TEXTURE_MATCH[new_dir]
+        self.mask = pygame.mask.from_surface(self.texture)
 
     def coords(self):
         return self.x, self.y
 
     def draw(self):
         if self.direction == DIRECTION_NORTH or self.direction == DIRECTION_SOUTH:
-            screen.blit(self.texture, (self.x - TEXTURE_PERP_VERT_SIZE[WIDTH] / 2,
-                                       self.y - TEXTURE_PERP_VERT_SIZE[HEIGHT] / 2))
+            self.x_texture = self.x - TEXTURE_PERP_VERT_SIZE[WIDTH] / 2
+            self.y_texture = self.y - TEXTURE_PERP_VERT_SIZE[HEIGHT] / 2
         elif self.direction == DIRECTION_EAST or self.direction == DIRECTION_WEST:
-            screen.blit(self.texture, (self.x - TEXTURE_PERP_HORZ_SIZE[WIDTH] / 2,
-                                       self.y - TEXTURE_PERP_HORZ_SIZE[HEIGHT] / 2))
-        elif self.direction == DIRECTION_NORTHEAST or \
-                self.direction == DIRECTION_NORTHWEST or \
-                self.direction == DIRECTION_SOUTHEAST or \
-                self.direction == DIRECTION_SOUTHWEST:
-            screen.blit(self.texture, (self.x - TEXTURE_DIAG_SIZE[WIDTH] / 2, self.y - TEXTURE_DIAG_SIZE[HEIGHT] / 2))
+            self.x_texture = self.x - TEXTURE_PERP_HORZ_SIZE[WIDTH] / 2
+            self.y_texture = self.y - TEXTURE_PERP_HORZ_SIZE[HEIGHT] / 2
+        else:  # Diagonal
+            self.x_texture = self.x - TEXTURE_DIAG_SIZE[WIDTH] / 2
+            self.y_texture = self.y - TEXTURE_DIAG_SIZE[HEIGHT] / 2
+        screen.blit(self.texture, (self.x_texture, self.y_texture))
 
     def next_direction(self):
         index = DIRECTION_ORDER.index(self.direction)
@@ -46,11 +49,11 @@ class Sword:
 
     def fix_location(self):
         if self.x < 0:
-            self.x = SCREEN_SIZE[WIDTH] - self.x
+            self.x = SCREEN_SIZE[WIDTH] + self.x
         elif self.x >= SCREEN_SIZE[WIDTH]:
             self.x = self.x - SCREEN_SIZE[WIDTH]
         if self.y < 0:
-            self.y = SCREEN_SIZE[HEIGHT] - self.y
+            self.y = SCREEN_SIZE[HEIGHT] + self.y
         elif self.y >= SCREEN_SIZE[HEIGHT]:
             self.y = self.y - SCREEN_SIZE[HEIGHT]
 
@@ -105,11 +108,17 @@ class Sword:
     def apply_effect(self, effect, time):
         pass
 
+    def colliding(self, obj):
+        offset_x = int(obj.x_texture - self.x_texture)
+        offset_y = int(obj.y_texture - self.y_texture)
+        return self.mask.overlap(obj.mask, (offset_x, offset_y))
+
 
 def game_loop():
     player = Sword(SCREEN_SIZE[WIDTH] / 2, SCREEN_SIZE[HEIGHT] / 2)
     clock = pygame.time.Clock()
     frame = -1
+    text_font = pygame.font.SysFont("comicsansms", 16)
 
     while True:
         clock.tick(TICK_RATE)
@@ -133,6 +142,8 @@ def game_loop():
             if datetime.datetime.utcnow() > player.stop_dash_time:
                 player.stop_dash()
 
+        fps_text = text_font.render(f"fps: {round(clock.get_fps())}", False, (255, 255, 255))
+        screen.blit(fps_text, (0, 0))
         player.draw()
         pygame.display.update()
 
