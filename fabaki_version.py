@@ -248,7 +248,7 @@ def game_loop():
 
 def main():
     pygame.init()
-    pygame.mixer.init(frequency=44100, size=-16, channels=2, buffer=512)
+    pygame.mixer.init()
     pygame.mixer.music.set_volume(0.5)
     game_loop()
     pygame.quit()
