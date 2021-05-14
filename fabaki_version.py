@@ -1,4 +1,6 @@
 import datetime
+import random
+
 from fabaki_version_header import *
 from random import randint
 import pygame
@@ -213,6 +215,8 @@ def game_loop():
     clock = pygame.time.Clock()
     frame = -1
     text_font = pygame.font.SysFont("comicsansms", 16)
+    # pygame.mixer.music.load(f"{SOUND_PATH}\\{SOUND_TING_NAME}.{SOUND_FILE_EXT}")
+    # pygame.mixer.music.play()
 
     while True:
         clock.tick(TICK_RATE)
@@ -250,6 +254,11 @@ def main():
     pygame.init()
     pygame.mixer.init()
     pygame.mixer.music.set_volume(0.5)
+    pygame.mixer.Channel(1).set_volume(0.1)
+    if randint(0, 1) == 0:
+        pygame.mixer.Channel(1).play(pygame.mixer.Sound(f"{SOUND_PATH}\\{SOUND_BACKGROUND1_NAME}.{SOUND_FILE_EXT}"))
+    else:
+        pygame.mixer.Channel(1).play(pygame.mixer.Sound(f"{SOUND_PATH}\\{SOUND_BACKGROUND2_NAME}.{SOUND_FILE_EXT}"))
     game_loop()
     pygame.quit()
 
