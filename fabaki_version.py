@@ -1,6 +1,4 @@
 import datetime
-import random
-
 from fabaki_version_header import *
 from random import randint
 import pygame
@@ -33,7 +31,8 @@ class OnScreen:
 class Regeneratable(OnScreen):
     # for creating a mushroom should be ('MUSH_TEXTURE', 30, type="speed_mush") usually the other are not touched
     # regen_cd CAN be a 2 sized tuple, where a,b are the min and max cooldown times!
-    def __init__(self, texture, regen_cooldown, object_type=None, random_loc=True, x=-1, y=-1, vulnerabilities=(None, )):
+    def __init__(self, texture, regen_cooldown, object_type=None, random_loc=True, x=-1, y=-1,
+                 vulnerabilities=(None, )):
         OnScreen.__init__(self, x, y, texture, object_type)
         self.regen_cooldown = regen_cooldown
         self.random_loc = random_loc
@@ -148,7 +147,7 @@ class Sword:
             flip_sound()
 
         if self.undashable is not None and datetime.datetime.utcnow() > self.undashable:
-            self.undashable = None # means dash is ready
+            self.undashable = None  # means dash is ready
             pygame.mixer.music.load(f"{SOUND_PATH}\\{SOUND_TING_NAME}.{SOUND_FILE_EXT}")
             pygame.mixer.music.play()
         if not self.dashing:
@@ -208,26 +207,32 @@ class Sword:
         return self.mask.overlap(obj.mask, (offset_x, offset_y))
 
 
+# music
+
 pygame.mixer.init()
 pygame.mixer.music.set_volume(0.5)
 pygame.mixer.Channel(1).set_volume(0.1)
-song = None
+
 song1load = pygame.mixer.Sound(f"{SOUND_PATH}\\{SOUND_BACKGROUND1_NAME}.{SOUND_FILE_EXT}")
 song2load = pygame.mixer.Sound(f"{SOUND_PATH}\\{SOUND_BACKGROUND2_NAME}.{SOUND_FILE_EXT}")
+current_song = randint(1, 2)
+changed = datetime.datetime.utcnow()-datetime.timedelta(seconds=2)
 
 
-# it's written real stupidly but sounds should be loaded all the time and not when called, prevents lag
 def flip_sound():
-    global song
+    global changed
+    global current_song
+    if datetime.datetime.utcnow()-changed < datetime.timedelta(seconds=1):
+        return  # prevent spamming, I have when 'e' is pressed it calls this like 4-5 times
+    changed = datetime.datetime.utcnow()
     pygame.mixer.Channel(1).stop()
-    if song is None:
-        song = SOUND_BACKGROUND1_NAME if randint(0, 1) else SOUND_BACKGROUND2_NAME
-    else:
-        song = SOUND_BACKGROUND2_NAME if song == SOUND_BACKGROUND1_NAME else SOUND_BACKGROUND1_NAME
-    if song == SOUND_BACKGROUND1_NAME:
+    current_song = 3 - current_song  # lol 3 - 1 = 2 and 3 - 2 = 1 funny math!
+    if current_song == 1:
         pygame.mixer.Channel(1).play(song1load)
-    elif song == SOUND_BACKGROUND2_NAME:
+    elif current_song == 2:
         pygame.mixer.Channel(1).play(song2load)
+
+# music END
 
 
 def game_loop():
