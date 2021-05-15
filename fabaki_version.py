@@ -7,11 +7,10 @@ screen = pygame.display.set_mode((SCREEN_SIZE[WIDTH], SCREEN_SIZE[HEIGHT]))
 
 
 class OnScreen:
-    def __init__(self, x, y, texture, object_type):
+    def __init__(self, x, y, texture):
         self.x = x
         self.y = y
         self.texture = texture
-        self.object_type = object_type
         self.mask = pygame.mask.from_surface(self.texture)
         self.width = texture.get_rect().width
         self.height = texture.get_rect().height
@@ -40,7 +39,7 @@ class Regeneratable(OnScreen):
     # regen_cd CAN be a 2 sized tuple, where a,b are the min and max cooldown times!
     def __init__(self, texture, regen_cooldown, object_type=None, random_loc=True, x=-1, y=-1,
                  vulnerabilities=(None, )):
-        OnScreen.__init__(self, x, y, texture, object_type)
+        OnScreen.__init__(self, x, y, texture)
         self.regen_cooldown = regen_cooldown
         self.random_loc = random_loc
         self.cooldown = 0
@@ -48,6 +47,7 @@ class Regeneratable(OnScreen):
         if self.random_loc or x < 0 or y < 0:
             self.generate_random_loc()
         self.vulnerabilities = vulnerabilities
+        self.object_type = object_type
 
     def generate_random_loc(self):
         self.x, self.y = randint(SCREEN_PADDING, SCREEN_SIZE[WIDTH] - self.width - SCREEN_PADDING), \
@@ -136,16 +136,11 @@ class SwordEffects:
         self.speed_mush_effect = SpeedUpEffect(sword)
 
 
-class Sword:
+class Sword(OnScreen):
     def __init__(self, x, y):
-        self.x = x
-        self.y = y
-        self.x_texture = x
-        self.y_texture = y
+        OnScreen.__init__(self, x, y, TEXTURE_NORTH)
         self.direction = DIRECTION_NORTH
         self.move_vector = [0, 0]  # By means of top-left, aka [1, 1] is South-East
-        self.texture = TEXTURE_NORTH
-        self.mask = pygame.mask.from_surface(self.texture)
         self.vel = SWORD_SPEED
         self.score = 0
         self.effects = SwordEffects(self)
@@ -155,9 +150,6 @@ class Sword:
         self.direction = new_dir
         self.texture = DIRECTION_TEXTURE_MATCH[new_dir]
         self.mask = pygame.mask.from_surface(self.texture)
-
-    def coords(self):
-        return self.x, self.y
 
     def draw(self):
         if self.direction == DIRECTION_NORTH or self.direction == DIRECTION_SOUTH:
@@ -192,6 +184,8 @@ class Sword:
         self.current_tick += 1
         if self.current_tick % SWORD_ANIMATION_DELAY == 0 and not self.effects.dash_effect.active:
             self.next_direction()
+        if self.current_tick == SWORD_ANIMATION_DELAY * 2:
+            self.current_tick = 1
 
         self.move_vector = [0, 0]
         if not self.effects.dash_effect.active:
