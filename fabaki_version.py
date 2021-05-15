@@ -144,6 +144,9 @@ class Sword:
         keys = pygame.key.get_pressed()
         mov = [0, 0]  # By means of top-left, aka [1, 1] is South-East
 
+        if keys[pygame.K_e]:
+            flip_sound()
+
         if self.undashable is not None and datetime.datetime.utcnow() > self.undashable:
             self.undashable = None # means dash is ready
             pygame.mixer.music.load(f"{SOUND_PATH}\\{SOUND_TING_NAME}.{SOUND_FILE_EXT}")
@@ -205,6 +208,28 @@ class Sword:
         return self.mask.overlap(obj.mask, (offset_x, offset_y))
 
 
+pygame.mixer.init()
+pygame.mixer.music.set_volume(0.5)
+pygame.mixer.Channel(1).set_volume(0.1)
+song = None
+song1load = pygame.mixer.Sound(f"{SOUND_PATH}\\{SOUND_BACKGROUND1_NAME}.{SOUND_FILE_EXT}")
+song2load = pygame.mixer.Sound(f"{SOUND_PATH}\\{SOUND_BACKGROUND2_NAME}.{SOUND_FILE_EXT}")
+
+
+# it's written real stupidly but sounds should be loaded all the time and not when called, prevents lag
+def flip_sound():
+    global song
+    pygame.mixer.Channel(1).stop()
+    if song is None:
+        song = SOUND_BACKGROUND1_NAME if randint(0, 1) else SOUND_BACKGROUND2_NAME
+    else:
+        song = SOUND_BACKGROUND2_NAME if song == SOUND_BACKGROUND1_NAME else SOUND_BACKGROUND1_NAME
+    if song == SOUND_BACKGROUND1_NAME:
+        pygame.mixer.Channel(1).play(song1load)
+    elif song == SOUND_BACKGROUND2_NAME:
+        pygame.mixer.Channel(1).play(song2load)
+
+
 def game_loop():
     player = Sword(SCREEN_SIZE[WIDTH] / 2, SCREEN_SIZE[HEIGHT] / 2)
     enemies = [Regeneratable(TEXTURE_SLIME, 10, TEXTURE_SLIME_NAME, vulnerabilities=("normal", "dash")),
@@ -252,13 +277,7 @@ def game_loop():
 
 def main():
     pygame.init()
-    pygame.mixer.init()
-    pygame.mixer.music.set_volume(0.5)
-    pygame.mixer.Channel(1).set_volume(0.1)
-    if randint(0, 1):
-        pygame.mixer.Channel(1).play(pygame.mixer.Sound(f"{SOUND_PATH}\\{SOUND_BACKGROUND1_NAME}.{SOUND_FILE_EXT}"))
-    else:
-        pygame.mixer.Channel(1).play(pygame.mixer.Sound(f"{SOUND_PATH}\\{SOUND_BACKGROUND2_NAME}.{SOUND_FILE_EXT}"))
+    flip_sound()
     game_loop()
     pygame.quit()
 
