@@ -26,7 +26,7 @@ class OnScreen:
         screen.blit(self.texture, (self.x_texture, self.y_texture))
 
 
-class Effect:
+class Power:
     def __init__(self, entity, duration, cooldown):
         self.entity = entity
         self.duration = duration
@@ -34,11 +34,24 @@ class Effect:
         self.active = False
 
 
+class Effect:
+    def __init__(self, entity, duration):
+        self.entity = entity
+        self.duration = duration
+
+    def start_effect(self):
+        return
+
+    def stop_effect(self):
+        return
+
+    def tick(self):
+        return
+
+
 class Regeneratable(OnScreen):
-    # for creating a mushroom should be ('MUSH_TEXTURE', 30, type="speed_mush") usually the other are not touched
-    # regen_cd CAN be a 2 sized tuple, where a,b are the min and max cooldown times!
-    def __init__(self, texture, regen_cooldown, object_type=None, random_loc=True, x=-1, y=-1,
-                 vulnerabilities=(None, )):
+    def __init__(self, texture, regen_cooldown, effects=None, random_loc=True, x=-1, y=-1,
+                 kill_conditions=(), kill_conditions_all=True):
         OnScreen.__init__(self, x, y, texture)
         self.regen_cooldown = regen_cooldown
         self.random_loc = random_loc
@@ -46,8 +59,12 @@ class Regeneratable(OnScreen):
         self.alive = True
         if self.random_loc or x < 0 or y < 0:
             self.generate_random_loc()
-        self.vulnerabilities = vulnerabilities
-        self.object_type = object_type
+        self.kill_conditions = kill_conditions
+        self.kill_conditions_all = kill_conditions_all
+        if type(effects) == tuple:
+            self.effects = effects
+        else:
+            self.effects = (effects, )
 
     def generate_random_loc(self):
         self.x, self.y = randint(SCREEN_PADDING, SCREEN_SIZE[WIDTH] - self.width - SCREEN_PADDING), \
@@ -61,7 +78,35 @@ class Regeneratable(OnScreen):
         if self.alive:
             self.draw()
 
-    def on_collide(self):
+    def on_collide(self, entity):
+        if self.kill_conditions_all:
+            for cond in self.kill_conditions:
+                if type(cond) == type and issubclass(cond, Effect):
+                    for effect in entity.effects:
+                        if cond != type(effect):
+                            continue
+                        if not effect.active:
+                            return ()
+                elif not cond.active:
+                    return ()
+        else:
+            kill_conditions_met = False
+            for cond in self.kill_conditions:
+                if type(cond) == type and issubclass(cond, Effect):
+                    for effect in entity.effects:
+                        if cond != type(effect):
+                            continue
+                        if effect.active:
+                            kill_conditions_met = True
+                            break
+                    if kill_conditions_met:
+                        break
+                elif cond.active:
+                    kill_conditions_met = True
+                    break
+            if not kill_conditions_met:
+                return ()
+
         if type(self.regen_cooldown) == tuple and len(self.regen_cooldown) == 2:
             self.cooldown = randint(*self.regen_cooldown)
         else:
@@ -69,17 +114,80 @@ class Regeneratable(OnScreen):
         if self.random_loc:
             self.generate_random_loc()
         self.alive = False
-        return self.object_type
+        return self.effects
+
+
+class RandomTeleportEffect(Effect):
+    def __init__(self, entity, animation_duration=EFFECT_TELESHROOM_ANIMATION_DURATION):
+        Effect.__init__(self, entity, animation_duration)
+        self.changed_textures = []
+        self.actual_duration = 0
+
+    def start_effect(self):
+        self.actual_duration = self.duration
+        self.entity.x = randint(1, SCREEN_SIZE[WIDTH] - 2)
+        self.entity.y = randint(1, SCREEN_SIZE[HEIGHT] - 2)
+        self.entity.fix_location()
+
+    def stop_effect(self):
+        for changed_texture in self.changed_textures:
+            DIRECTION_TEXTURE_MATCH[changed_texture] = load_texture(changed_texture)
+
+    def tick(self):  # Returns whether to stop
+        # if self.actual_duration % 6 <= 2:
+        #     DIRECTION_TEXTURE_MATCH[self.entity.direction].fill((0, 0, 190, 100), special_flags=pygame.BLEND_SUB)
+        # else:
+        #     DIRECTION_TEXTURE_MATCH[self.entity.direction].fill((190, 0, 0, 100), special_flags=pygame.BLEND_SUB)
+        # self.changed_textures.append(self.entity.direction)
+        self.actual_duration -= 1
+        if self.actual_duration <= 0:
+            self.stop_effect()
+            return True
+        return False
 
 
 class SpeedUpEffect(Effect):
-    def __init__(self, entity):
-        Effect.__init__(self, entity, -1, -1)
+    def __init__(self, entity, duration, power):
+        Effect.__init__(self, entity, duration)
+        self.power = power
+        self.actual_duration = duration
+        self.changed_textures = []
+        self.active = False
+
+    def start_effect(self):
+        self.active = True
+        self.actual_duration = self.duration
+        self.entity.stats[STATS_VELOCITY] *= self.power
+
+    def stop_effect(self):
+        self.active = False
+        self.entity.stats[STATS_VELOCITY] /= self.power
+        for changed_texture in self.changed_textures:
+            DIRECTION_TEXTURE_MATCH[changed_texture] = load_texture(changed_texture)
+
+    def tick(self):  # Returns whether to stop
+        DIRECTION_TEXTURE_MATCH[self.entity.direction]\
+            .fill((0, 190, 0, 100), special_flags=pygame.BLEND_SUB)
+        self.changed_textures.append(self.entity.direction)
+        self.actual_duration -= 1
+        if self.actual_duration <= 0:
+            self.stop_effect()
+            return True
+        return False
 
 
-class DashEffect(Effect):
+class ScoreUpEffect(Effect):
+    def __init__(self, entity, power):
+        Effect.__init__(self, entity, -1)
+        self.power = power
+
+    def start_effect(self):
+        self.entity.stats[STATS_SCORE] += self.power
+
+
+class DashPower(Power):
     def __init__(self, entity, direction):
-        Effect.__init__(self, entity, -1, -1)
+        Power.__init__(self, entity, -1, -1)
         self.direction = direction
         self.power = -1
         self.ready = True
@@ -93,18 +201,20 @@ class DashEffect(Effect):
         self.power = power
         self.ready = False
         self.active = True
+        self.entity.stats[STATS_MOVABLE] = False
 
         self.entity.texture.fill((190, 0, 0, 100), special_flags=pygame.BLEND_SUB)
-        self.entity.vel *= self.power
+        self.entity.stats[STATS_VELOCITY] *= self.power
         return True
 
     def stop_dash(self):
         self.duration = -1
         self.active = False
+        self.entity.stats[STATS_MOVABLE] = True
 
         DIRECTION_TEXTURE_MATCH[MOVE_DIRECTION_MATCH[tuple(self.direction)]] = \
             load_texture(MOVE_DIRECTION_MATCH[tuple(self.direction)])
-        self.entity.vel /= self.power
+        self.entity.stats[STATS_VELOCITY] /= self.power
 
     def set_cooldown(self, cooldown):  # Can't stop dash! only to set the cooldown again when dash is un active
         if cooldown <= self.cooldown:
@@ -121,35 +231,33 @@ class DashEffect(Effect):
             self.entity.move_vector = self.direction
 
         if self.cooldown == 0:
+            pygame.mixer.Channel(0).play(SOUND_TING)
             self.ready = True
-            pygame.mixer.music.load(f"{SOUND_PATH}\\{SOUND_TING_NAME}.{SOUND_FILE_EXT}")
-            pygame.mixer.music.play()
             self.cooldown = -1
         if self.duration == 0:
             self.stop_dash()
             self.duration = -1
 
 
-class SwordEffects:
+class SwordPowers:
     def __init__(self, sword):
-        self.dash_effect = DashEffect(sword, [0, 0])
-        self.speed_mush_effect = SpeedUpEffect(sword)
+        self.dash_effect = DashPower(sword, [0, 0])
 
 
 class Sword(OnScreen):
     def __init__(self, x, y):
-        OnScreen.__init__(self, x, y, TEXTURE_NORTH)
+        OnScreen.__init__(self, x, y, DIRECTION_TEXTURE_MATCH[DIRECTION_NORTH])
         self.direction = DIRECTION_NORTH
         self.move_vector = [0, 0]  # By means of top-left, aka [1, 1] is South-East
-        self.vel = SWORD_SPEED
-        self.score = 0
-        self.effects = SwordEffects(self)
+        self.stats = {STATS_VELOCITY: SWORD_SPEED, STATS_SCORE: 0, STATS_MOVABLE: True}
+        self.powers = SwordPowers(self)
+        self.effects = []
         self.current_tick = 0
 
     def change_dir(self, new_dir):
         self.direction = new_dir
         self.texture = DIRECTION_TEXTURE_MATCH[new_dir]
-        self.mask = pygame.mask.from_surface(self.texture)
+        self.mask = TEXTURE_MASK_MATCH[new_dir]
 
     def draw(self):
         if self.direction == DIRECTION_NORTH or self.direction == DIRECTION_SOUTH:
@@ -182,65 +290,64 @@ class Sword(OnScreen):
 
     def tick(self):
         self.current_tick += 1
-        if self.current_tick % SWORD_ANIMATION_DELAY == 0 and not self.effects.dash_effect.active:
+        if not self.powers.dash_effect.active and self.current_tick % SWORD_ANIMATION_DELAY == 0:
             self.next_direction()
         if self.current_tick == SWORD_ANIMATION_DELAY * 2:
             self.current_tick = 1
 
         self.move_vector = [0, 0]
-        if not self.effects.dash_effect.active:
-            self.move_keys()
-        self.effects.dash_effect.tick()
+
+        self.keys_handler()
+
+        self.powers.dash_effect.tick()
+        for effect in self.effects:
+            if effect.tick():
+                self.effects.remove(effect)
 
         self.move()
         self.draw()
 
-    def move_keys(self):
+    def keys_handler(self):
         keys = pygame.key.get_pressed()
 
         if keys[pygame.K_e]:
             flip_sound()
 
-        if not self.effects.dash_effect.active:  # Not dashing
-            if keys[pygame.K_a] or keys[pygame.K_LEFT]:
-                self.move_vector[0] -= 1
-            if keys[pygame.K_d] or keys[pygame.K_RIGHT]:
-                self.move_vector[0] += 1
-            if keys[pygame.K_w] or keys[pygame.K_UP]:
-                self.move_vector[1] -= 1
-            if keys[pygame.K_s] or keys[pygame.K_DOWN]:
-                self.move_vector[1] += 1
+        if self.stats[STATS_MOVABLE]:
+            self.move_keys(keys)
 
             if self.move_vector == [0, 0]:  # We didn't move, so we can dash
-                if self.effects.dash_effect.ready and keys[pygame.K_SPACE]:
-                    self.effects.dash_effect.start_dash(list(DIRECTION_MOVE_MATCH[self.direction]))
+                if self.powers.dash_effect.ready and keys[pygame.K_SPACE]:
+                    self.powers.dash_effect.start_dash(list(DIRECTION_MOVE_MATCH[self.direction]))
             else:
                 self.change_dir(MOVE_DIRECTION_MATCH[tuple(self.move_vector)])
-                self.effects.dash_effect.set_cooldown(DASH_MOVE_COOLDOWN)
+                self.powers.dash_effect.set_cooldown(DASH_MOVE_COOLDOWN)
+
+    def move_keys(self, keys):
+        if keys[pygame.K_a] or keys[pygame.K_LEFT]:
+            self.move_vector[0] -= 1
+        if keys[pygame.K_d] or keys[pygame.K_RIGHT]:
+            self.move_vector[0] += 1
+        if keys[pygame.K_w] or keys[pygame.K_UP]:
+            self.move_vector[1] -= 1
+        if keys[pygame.K_s] or keys[pygame.K_DOWN]:
+            self.move_vector[1] += 1
 
     def move(self):
-        self.x += self.move_vector[0] * self.vel
-        self.y += self.move_vector[1] * self.vel
+        self.x += self.move_vector[0] * self.stats[STATS_VELOCITY]
+        self.y += self.move_vector[1] * self.stats[STATS_VELOCITY]
         self.fix_location()
 
-    def apply_effect(self, object_type):
-        if object_type not in TYPE_EFFECT:
-            return
-
-        for effect in TYPE_EFFECT[object_type]:
-            if effect.startswith(EFFECT_SCORE_UP):
-                self.score += int(effect[len(EFFECT_SCORE_UP):])
-            # if effect.startswith(EFFECT_SPEED_UP):
-            #     dur_power = effect[len(EFFECT_SPEED_UP):].split("@")
-            #     self.effects.append([EFFECT_SPEED_UP, int(dur_power[0]), int(dur_power[1])])
+    def apply_effect(self, object_effects):
+        for effect in object_effects:
+            effect.start_effect()
+            self.effects.append(effect)
 
     def colliding(self, obj):
         offset_x = int(obj.x_texture - self.x_texture)
         offset_y = int(obj.y_texture - self.y_texture)
         return self.mask.overlap(obj.mask, (offset_x, offset_y))
 
-
-# music
 
 current_song = randint(0, len(BACKGROUND_SONGS) - 1)
 changed = datetime.datetime.utcnow() - datetime.timedelta(seconds=2)
@@ -254,28 +361,29 @@ def flip_sound():
     changed = datetime.datetime.utcnow()
     pygame.mixer.Channel(1).stop()
     current_song = (current_song + 1) % len(BACKGROUND_SONGS)
-    pygame.mixer.Channel(1).play(BACKGROUND_SONGS[current_song])
-
-
-# music END
+    pygame.mixer.Channel(1).play(BACKGROUND_SONGS[current_song], loops=-1)
 
 
 def game_loop():
     player = Sword(SCREEN_SIZE[WIDTH] / 2, SCREEN_SIZE[HEIGHT] / 2)
-    enemies = [Regeneratable(TEXTURE_SLIME, 10, TEXTURE_SLIME_NAME, vulnerabilities=("normal", "dash")),
-               Regeneratable(TEXTURE_SLIME, 10, TEXTURE_SLIME_NAME, vulnerabilities=("normal", "dash")),
-               Regeneratable(TEXTURE_SLIME, 10, TEXTURE_SLIME_NAME, vulnerabilities=("normal", "dash")),
-               Regeneratable(TEXTURE_GOLDEN_SLIME, (100, 300), TEXTURE_GOLDEN_SLIME_NAME, vulnerabilities=("dash",)),
-               Regeneratable(TEXTURE_SPEED_MUSH, 50, TEXTURE_SPEED_MUSH_NAME, vulnerabilities=("normal", "dash"))]
+    entities = [Regeneratable(TEXTURE_SLIME, 10, effects=ScoreUpEffect(player, EFFECT_SLIME_SCORE)),
+                Regeneratable(TEXTURE_SLIME, 10, effects=ScoreUpEffect(player, EFFECT_SLIME_SCORE)),
+                Regeneratable(TEXTURE_SLIME, 10, effects=ScoreUpEffect(player, EFFECT_SLIME_SCORE)),
+                Regeneratable(TEXTURE_GOLDEN_SLIME, (100, 300),
+                              kill_conditions=(player.powers.dash_effect, SpeedUpEffect), kill_conditions_all=False,
+                              effects=ScoreUpEffect(player, EFFECT_GOLDEN_SLIME_SCORE)),
+                Regeneratable(TEXTURE_SPEED_MUSH, 50,
+                              effects=SpeedUpEffect(player, EFFECT_SPEED_MUSH_DURATION, EFFECT_SPEED_MUSH_POWER)),
+                Regeneratable(TEXTURE_TELESHROOM, 50,
+                              effects=RandomTeleportEffect(player)),]
     clock = pygame.time.Clock()
-    frame = -1
     text_font = pygame.font.SysFont("comicsansms", 16)
+    progress_width = 10
+    progress_height = 150
+    game_settings = {SETTINGS_TICK_RATE: TICK_RATE}
 
     while True:
-        clock.tick(TICK_RATE)
-        frame += 1
-        if frame == TICK_RATE:
-            frame = 0
+        clock.tick(game_settings[SETTINGS_TICK_RATE])
 
         screen.blit(TEXTURE_BACKGROUND, (0, 0))
 
@@ -285,17 +393,24 @@ def game_loop():
 
         player.tick()
 
-        for enemy in enemies:
-            # if enemy.alive:
-            #     if "normal" in enemy.vulnerabilities or ("dash" in enemy.vulnerabilities and player.dashing):
-            #         if player.colliding(enemy):
-            #             player.apply_effect(enemy.on_collide())
+        for enemy in entities:
             if enemy.alive and player.colliding(enemy):
-                player.apply_effect(enemy.on_collide())
+                player.apply_effect(enemy.on_collide(player))
             enemy.tick()
 
         fps_text = text_font.render(f"fps: {round(clock.get_fps())}", False, (255, 255, 255))
-        score_text = text_font.render(f"score: {player.score}", False, (255, 255, 255))
+        score_text = text_font.render(f"score: {player.stats[STATS_SCORE]}", False, (255, 255, 255))
+        if player.powers.dash_effect.ready:
+            pygame.draw.rect(screen, (100, 30, 255), (SCREEN_SIZE[WIDTH] - 10 - progress_width, 10, progress_width,
+                                                      progress_height))
+            pygame.draw.rect(screen, (100, 20, 110), (SCREEN_SIZE[WIDTH] - 10 - progress_width, 10, progress_width,
+                                                      progress_height), 2)
+        else:
+            pygame.draw.rect(screen, (0, 200, 255), (SCREEN_SIZE[WIDTH] - 10 - progress_width, 10, progress_width,
+                                                     round(((DASH_COOLDOWN - player.powers.dash_effect.cooldown)
+                                                            * progress_height / DASH_COOLDOWN))))
+            pygame.draw.rect(screen, (0, 110, 110), (SCREEN_SIZE[WIDTH] - 10 - progress_width, 10, progress_width,
+                                                     progress_height), 2)
         screen.blit(fps_text, (0, 0))
         screen.blit(score_text, (0, fps_text.get_rect().height))
         player.draw()
