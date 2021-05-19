@@ -1,5 +1,6 @@
 import datetime
 from tale_of_zenith_header import *
+from fabaki_menu import *
 import random
 import pygame
 
@@ -315,7 +316,7 @@ class Sword(OnScreen):
         elif self.y >= SCREEN_SIZE[HEIGHT]:
             self.y = self.y - SCREEN_SIZE[HEIGHT]
 
-    def tick(self):
+    def tick(self, keys):
         self.current_tick += 1
         if not self.powers.dash_effect.active and self.current_tick % SWORD_ANIMATION_DELAY == 0:
             self.next_direction()
@@ -324,7 +325,7 @@ class Sword(OnScreen):
 
         self.move_vector = [0, 0]
 
-        self.keys_handler()
+        self.keys_handler(keys)
 
         self.powers.dash_effect.tick()
         for effect in self.effects:
@@ -334,12 +335,7 @@ class Sword(OnScreen):
         self.move()
         self.draw()
 
-    def keys_handler(self):
-        keys = pygame.key.get_pressed()
-
-        if keys[pygame.K_e]:
-            flip_sound()
-
+    def keys_handler(self, keys):
         if self.stats[STATS_MOVABLE]:
             self.move_keys(keys)
 
@@ -391,6 +387,24 @@ def flip_sound():
     pygame.mixer.Channel(1).play(BACKGROUND_SONGS[current_song], loops=-1)
 
 
+def pause_menu():
+    menu = Menu(screen, auto=True, background=(100, 100, 100), menu_width=500, menu_height=500)
+    comic_sans = pygame.font.SysFont("Arial", 30)
+    menu.add_element([TextElement("paused!", comic_sans), TextElement("homo", comic_sans)])
+    menu.add_element(TextElement("continue?", comic_sans))
+    menu.add_element(ButtonElement("Continue", (130, 0, 130), comic_sans, onclick_kill=True))
+    return menu.menu_loop()  # We pressed on close button
+
+
+def global_keys_handler(keys):
+    if keys[pygame.K_ESCAPE]:
+        if pause_menu():
+            return True
+
+    if keys[pygame.K_e]:
+        flip_sound()
+
+
 def game_loop():
     player = Sword(SCREEN_SIZE[WIDTH] / 2, SCREEN_SIZE[HEIGHT] / 2)
     entities = [Regeneratable(TEXTURE_SLIME, 10, effects=ScoreUpEffect(player, EFFECT_SLIME_SCORE)),
@@ -412,6 +426,7 @@ def game_loop():
 
     while True:
         clock.tick(game_settings[SETTINGS_TICK_RATE])
+        keys = pygame.key.get_pressed()
 
         screen.blit(TEXTURE_BACKGROUND, (0, 0))
 
@@ -419,7 +434,9 @@ def game_loop():
             if event.type == pygame.QUIT:
                 return
 
-        player.tick()
+        if global_keys_handler(keys):
+            return
+        player.tick(keys)
 
         for enemy in entities:
             if enemy.alive and player.colliding(enemy):
